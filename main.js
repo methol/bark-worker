@@ -86,8 +86,8 @@ class Handler {
 
         this.register = async (parameters) => {
 
-            const param_devicetoken = parameters.get('devicetoken')
-            let param_key = parameters.get('key')
+            const param_devicetoken = parameters.devicetoken
+            let param_key = parameters.key
 
             let Response_Register = {}
 
