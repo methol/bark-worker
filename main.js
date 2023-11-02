@@ -5,26 +5,47 @@ export default {
 }
 
 // 这里决定是否允许新建设备
-const isAllowNewDevice = false
+const isAllowNewDevice = true
 // 是否允许查询设备数量
-const isAllowQueryNums = false
+const isAllowQueryNums = true
+
+// 添加别名的功能，缩短key的长度、好记，方便更新设备
+// 格式：key别名 真实的key(22位长度)
+const keyMap = new Map([
+	["xxxxx", "REPejhm1Rq5Y6MAHOMN123"],
+]);
 
 async function handleRequest(request, env, ctx) {
-    const { searchParams, pathname } = new URL(request.url)
-    const handler = new Handler(env)
+    const { searchParams: params, pathname } = new URL(request.url)
 
+    // 处理post里面携带的参数
+    const contentType = request.headers.get("content-type")
+    if (contentType.includes("form")) {
+        const formData = await request.formData();
+        for (const entry of formData.entries()) {
+          params[entry[0]] = entry[1];
+        }
+    }
+    if (contentType.includes("application/json")) {
+        const json = await request.json()
+        Object.keys(json).forEach(key => {
+            params[key] = json[key]
+        })
+    }
+
+    const handler = new Handler(env)
     switch (pathname) {
         case "/register": {
-            return handler.register(searchParams)
+            return handler.register(params)
         }
         case "/ping": {
-            return handler.ping(searchParams)
+            return handler.ping(params)
         }
         case "/healthz": {
-            return handler.healthz(searchParams)
+            return handler.healthz(params)
         }
         case "/info": {
-            return handler.info(searchParams)
+            return handler.info(params)
         }
         case "/push": {
             let requestBody
@@ -36,7 +57,6 @@ async function handleRequest(request, env, ctx) {
             if (util.requestBodyCheck(requestBody)) {
                 return handler.push(undefined, requestBody)
             }
-
             return util.responseAccessDenied()
         }
         default: {
@@ -44,7 +64,7 @@ async function handleRequest(request, env, ctx) {
 
             // Check whether the URL is invalid
             if (util.pathPartsCheck(pathParts)) {
-                return handler.push(pathParts, searchParams)
+                return handler.push(pathParts, params)
             }
             
             return util.responseAccessDenied()
@@ -74,7 +94,7 @@ class Handler {
             if (!param_devicetoken) {
                 Response_Register = {
                     'message': 'device token is empty',
-                    'code': 400,
+                    'code': 411,
                     'timestamp': util.getTimestamp(),
                 }
 
@@ -88,7 +108,7 @@ class Handler {
                 } else {
                     Response_Register = {
                         'message': "device registration failed: register disabled",
-                        'code': 500,
+                        'code': 412,
                     }
 
                     return new Response(JSON.stringify(Response_Register), { status: Response_Register.code })
@@ -103,7 +123,7 @@ class Handler {
                 } else {
                     Response_Register = {
                         'message': "device registration failed: register disabled",
-                        'code': 500,
+                        'code': 413,
                     }
 
                     return new Response(JSON.stringify(Response_Register), { status: Response_Register.code })
@@ -155,18 +175,23 @@ class Handler {
         }
 
         this.push = async (pathParts, parameters) => {
-            let deviceToken
-
+            let key
             if (pathParts) {
-                deviceToken = await db.deviceTokenByKey(pathParts[1])
+                key = pathParts[1]
             } else {
-                deviceToken = await db.deviceTokenByKey(parameters.device_key)
+                key = parameters.device_key
             }
+            if (keyMap.get(key)) {
+                key = keyMap.get(key)
+            }
+
+            let deviceToken = await db.deviceTokenByKey(key)
+            console.log(key, deviceToken);
 
             if (!deviceToken) {
                 const Response_Access_Denied = {
                     'message': 'Access Denied: Invalid Key',
-                    'code': 500,
+                    'code': 414,
                     'timestamp': util.getTimestamp(),
                 }
                 return new Response(JSON.stringify(Response_Access_Denied), { status: Response_Access_Denied.code })
@@ -174,27 +199,25 @@ class Handler {
 
             let title
             let message
-
-            let requestBody = {}
+            let requestBody = parameters
 
             if (pathParts) {
                 if (pathParts.length === 3) {
                     // Message only
                     message = decodeURIComponent(pathParts[2])
+                    title = message
                 }
-
                 if (pathParts.length === 4) {
                     // We have a title now
                     title = decodeURIComponent(pathParts[2])
                     message = decodeURIComponent(pathParts[3])
                 }
-
-                parameters.forEach((value, key) => { requestBody[key] = value })
-            }else{
-                requestBody = parameters
-
-                title = requestBody.title || undefined
-                message = requestBody.body || undefined
+            }
+            if (!title) {
+                title = requestBody.title || 'empty_title'
+            }
+            if (!message) {
+                message = requestBody.body || 'empty_message'
             }
 
             let sound = requestBody.sound || '1107'
@@ -414,17 +437,21 @@ class Util {
         }
 
         this.pathPartsCheck = (pathParts) => {
-            return (pathParts[1].length === 22) && ((pathParts.length === 3 && pathParts[2]) || (pathParts.length === 4 && pathParts[2] && pathParts[3]))
+            // 因为别名的关系，所以去掉参数检查
+            // return (pathParts[1].length === 22) && ((pathParts.length === 3 && pathParts[2]) || (pathParts.length === 4 && pathParts[2] && pathParts[3]))
+            return true;
         }
 
         this.requestBodyCheck = (requestBody) => {
-            return (requestBody.device_key.length === 22)
+            // 因为别名的关系，所以去掉参数检查
+            // return (requestBody.device_key.length === 22)
+            return true;
         }
 
         this.responseAccessDenied = () => {
             const Response_Invalid_Access = {
                 'message': 'Access Denied',
-                'code': 500,
+                'code': 400,
                 'timestamp': util.getTimestamp(),
             }
             return new Response(JSON.stringify(Response_Invalid_Access), { status: Response_Invalid_Access.code });
