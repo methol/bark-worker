@@ -9,30 +9,12 @@ const isAllowNewDevice = true
 // 是否允许查询设备数量
 const isAllowQueryNums = true
 
-// 添加别名的功能，缩短key的长度、好记，方便更新设备
-// 格式：key别名 真实的key(22位长度)
 const keyMap = new Map([
-	["xxxxx", "REPejhm1Rq5Y6MAHOMN123"],
+	["methol", "REPejhm1Rq5Y6MAHOM1234"],
 ]);
 
 async function handleRequest(request, env, ctx) {
     const { searchParams: params, pathname } = new URL(request.url)
-
-    // 处理post里面携带的参数
-    const contentType = request.headers.get("content-type")
-    if (contentType.includes("form")) {
-        const formData = await request.formData();
-        for (const entry of formData.entries()) {
-          params[entry[0]] = entry[1];
-        }
-    }
-    if (contentType.includes("application/json")) {
-        const json = await request.json()
-        Object.keys(json).forEach(key => {
-            params[key] = json[key]
-        })
-    }
-
     const handler = new Handler(env)
     switch (pathname) {
         case "/register": {
@@ -64,6 +46,22 @@ async function handleRequest(request, env, ctx) {
 
             // Check whether the URL is invalid
             if (util.pathPartsCheck(pathParts)) {
+                if (request.method === "POST") {
+                    // 处理post里面携带的参数
+                    const contentType = request.headers.get("content-type")
+                    if (contentType.includes("form")) {
+                        const formData = await request.formData();
+                        for (const entry of formData.entries()) {
+                        params[entry[0]] = entry[1];
+                        }
+                    }
+                    if (contentType.includes("application/json")) {
+                        const json = await request.json()
+                        Object.keys(json).forEach(key => {
+                            params[key] = json[key]
+                        })
+                    }
+                }
                 return handler.push(pathParts, params)
             }
             
@@ -85,9 +83,8 @@ class Handler {
         const db = new Database(env)
 
         this.register = async (parameters) => {
-
-            const param_devicetoken = parameters.devicetoken
-            let param_key = parameters.key
+            const param_devicetoken = parameters.get('devicetoken')
+            let param_key = parameters.get('key')
 
             let Response_Register = {}
 
@@ -437,13 +434,11 @@ class Util {
         }
 
         this.pathPartsCheck = (pathParts) => {
-            // 因为别名的关系，所以去掉参数检查
             // return (pathParts[1].length === 22) && ((pathParts.length === 3 && pathParts[2]) || (pathParts.length === 4 && pathParts[2] && pathParts[3]))
             return true;
         }
 
         this.requestBodyCheck = (requestBody) => {
-            // 因为别名的关系，所以去掉参数检查
             // return (requestBody.device_key.length === 22)
             return true;
         }
